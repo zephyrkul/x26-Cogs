@@ -18,7 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # Most automodules are too small to have their own files
 
 from ..abc import MixinMeta, CompositeMetaClass
-from redbot.core.utils.chat_formatting import box
+from redbot.core.utils.chat_formatting import box, inline
 from redbot.core.utils.common_filters import INVITE_URL_RE
 from ..abc import CompositeMetaClass
 from ..enums import Action
@@ -31,7 +31,10 @@ from collections import deque
 import discord
 import datetime
 import logging
+import aiohttp
 
+PERSPECTIVE_API_URL = "https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key={}"
+AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=5)
 log = logging.getLogger("red.x26cogs.defender")
 
 class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
@@ -244,4 +247,51 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
                                     "`[p]defender notifynew 0` in the server.", embed=em)
                 except:
                     pass
+
+    async def comment_analysis(self, message):
+        guild = message.guild
+        author = message.author
+
+        body = {
+            "comment": {
+                "text": message.content
+            },
+            "requestedAttributes": {},
+            "doNotStore": True,
+        }
+
+        token = await self.config.guild(guild).ca_token()
+        attributes = await self.config.guild(guild).ca_attributes()
+        threshold = await self.config.guild(guild).ca_threshold()
+
+        for attribute in attributes:
+            body["requestedAttributes"][attribute] = {}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(PERSPECTIVE_API_URL.format(token), json=body, timeout=AIOHTTP_TIMEOUT) as r:
+                if r.status != 200:
+                    log.error("Error querying Perspective API")
+                    return
+                results = await r.json()
+
+        scores = results["attributeScores"]
+        for attribute in scores:
+            attribute_score = scores[attribute]["summaryScore"]["value"] * 100
+            if attribute_score >= threshold:
+                triggered_attribute = attribute
+                break
+        else:
+            return
+
+        action = await self.config.guild(guild).ca_action()
+
+        if Action(action) == Action.NoAction:
+            sanitized_content = message.content.replace("`", "'")
+            text = (f"Possible rule breaking message posted by {inline(author.name)} ({inline(str(author.id))})\n"
+                    f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category.\n'
+                    f"[Jump to message]({message.jump_url})\n"
+                    f"\nMessage:\n{box(sanitized_content)}")
+            em = discord.Embed(color=discord.Colour.red(), description=text)
+            em.set_author(name="Comment Analysis")
+            await self.send_notification(guild, "", embed=em)
 

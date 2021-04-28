@@ -112,6 +112,16 @@ class Events(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
                 except:
                     pass
 
+        ca_enabled = await self.config.guild(guild).ca_enabled()
+
+        if ca_enabled and not is_staff:
+            rank_ca = await self.config.guild(guild).ca_rank()
+            if rank_ca and rank >= rank_ca:
+                try:
+                    await self.comment_analysis(message)
+                except Exception as e:
+                    log.error("Error during comment analysis", exc_info=e)
+
     @commands.Cog.listener()
     async def on_message_edit(self, message_before: discord.Message, message: discord.Message):
         author = message.author
@@ -166,6 +176,16 @@ class Events(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
             inv_filter_rank = await self.config.guild(guild).invite_filter_rank()
             if rank >= inv_filter_rank:
                 expelled = await self.invite_filter(message)
+
+        ca_enabled = await self.config.guild(guild).ca_enabled()
+        if ca_enabled and not is_staff:
+            rank_ca = await self.config.guild(guild).ca_rank()
+            if rank_ca and rank >= rank_ca:
+                try:
+                    await self.comment_analysis(message)
+                except Exception as e:
+                    log.error("Error during comment analysis", exc_info=e)
+
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):

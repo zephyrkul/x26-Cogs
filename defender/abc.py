@@ -124,6 +124,10 @@ class MixinMeta(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    async def comment_analysis(self, message: discord.Message):
+        raise NotImplementedError()
+
+    @abstractmethod
     async def make_identify_embed(self, message, user, rank=True, link=True):
         raise NotImplementedError()
 
