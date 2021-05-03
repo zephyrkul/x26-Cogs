@@ -269,10 +269,15 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
 
         async with aiohttp.ClientSession() as session:
             async with session.post(PERSPECTIVE_API_URL.format(token), json=body, timeout=AIOHTTP_TIMEOUT) as r:
-                if r.status != 200:
-                    log.error("Error querying Perspective API")
+                if r.status == 200:
+                    results = await r.json()
+                else:
+                    if r.status != 400:
+                        # Not explicitly documented but if the API doesn't recognize the language error 400 is returned
+                        # We can safely ignore those cases
+                        log.error("Error querying Perspective API")
+                        log.debug(f"Sent: '{message.content}', received {r.status}")
                     return
-                results = await r.json()
 
         scores = results["attributeScores"]
         for attribute in scores:
@@ -285,13 +290,45 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
 
         action = await self.config.guild(guild).ca_action()
 
+        sanitized_content = message.content.replace("`", "'")
+        exp_text = "I have expelled the user for this message.\n" if Action(action) != Action.NoAction else ""
+        text = (f"Possible rule breaking message posted by {inline(author.name)} ({inline(str(author.id))})\n"
+                f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category.\n'
+                f"{exp_text}"
+                f"[Jump to message]({message.jump_url})\n"
+                f"\nMessage:\n{box(sanitized_content)}")
+        em = discord.Embed(color=discord.Colour.red(), description=text)
+        em.set_author(name="Comment Analysis")
+
         if Action(action) == Action.NoAction:
-            sanitized_content = message.content.replace("`", "'")
-            text = (f"Possible rule breaking message posted by {inline(author.name)} ({inline(str(author.id))})\n"
-                    f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category.\n'
-                    f"[Jump to message]({message.jump_url})\n"
-                    f"\nMessage:\n{box(sanitized_content)}")
-            em = discord.Embed(color=discord.Colour.red(), description=text)
-            em.set_author(name="Comment Analysis")
+            await self.send_notification(guild, "", embed=em)
+            return
+
+        reason = await self.config.guild(guild).ca_reason()
+
+        if Action(action) == Action.Ban:
+            delete_days = await self.config.guild(guild).ca_wipe()
+            await guild.ban(author, reason=reason, delete_message_days=delete_days)
+            self.dispatch_event("member_remove", author, Action.Ban.value, reason)
+            await self.send_notification(guild, "", embed=em)
+        elif Action(action) == Action.Kick:
+            await guild.kick(author, reason=reason)
+            self.dispatch_event("member_remove", author, Action.Kick.value, reason)
+            await self.send_notification(guild, "", embed=em)
+        elif Action(action) == Action.Softban:
+            await guild.ban(author, reason=reason, delete_message_days=1)
+            await guild.unban(author)
+            self.dispatch_event("member_remove", author, Action.Softban.value, reason)
             await self.send_notification(guild, "", embed=em)
 
+        await modlog.create_case(
+            self.bot,
+            guild,
+            message.created_at,
+            action,
+            author,
+            guild.me,
+            reason,
+            until=None,
+            channel=None,
+        )

@@ -76,6 +76,8 @@ default_guild_settings = {
     "ca_threshold": 80, # Percentage for CA to trigger
     "ca_action": Action.NoAction.value,
     "ca_rank": Rank.Rank4.value,
+    "ca_reason": "Bad comment", # Mod-log reason
+    "ca_wipe": 0, # If action is ban, wipe X days worth of messages
     "alert_enabled": True, # Available to helper roles by default
     "silence_enabled": False, # This is a manual module. Enabled = Available to be used...
     "silence_rank": 0, # ... and as such, this default will be 0

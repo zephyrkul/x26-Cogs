@@ -621,6 +621,25 @@ class Settings(MixinMeta, metaclass=CompositeMetaClass):  # type: ignore
                            "the invite link and notify the staff about it.")
         await ctx.tick()
 
+    @caset.command(name="reason")
+    async def casetreason(self, ctx: commands.Context, *, reason: str):
+        """Sets a reason for the action (modlog use)"""
+        if len(reason) < 1 or len(reason) > 500:
+            return await ctx.send("The reason can only contain a maximum of 500 characters.")
+        await self.config.guild(ctx.guild).ca_reason.set(reason)
+        await ctx.tick()
+
+    @caset.command(name="wipe")
+    async def casetwipe(self, ctx: commands.Context, days: int):
+        """Sets how many days worth of messages to delete if the action is ban
+
+        Setting 0 will not delete any message"""
+        if days < 0 or days > 7:
+            return await ctx.send("Value must be between 0 and 7.")
+        await self.config.guild(ctx.guild).ca_wipe.set(days)
+        await ctx.send(f"Value set. I will delete {days} days worth "
+                       "of messages if the action is ban.")
+
     @dset.group(name="voteout")
     @commands.admin()
     async def voteoutgroup(self, ctx: commands.Context):
