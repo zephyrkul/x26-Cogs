@@ -301,7 +301,10 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
         em.set_author(name="Comment Analysis")
 
         if Action(action) == Action.NoAction:
-            await self.send_notification(guild, "", embed=em)
+            heat_key = f"core-ca-{message.channel.id}-{author.id}"
+            if heat.get_custom_heat(guild, heat_key) == 0:
+                await self.send_notification(guild, "", embed=em)
+                heat.increase_custom_heat(guild, heat_key, datetime.timedelta(minutes=15))
             return
 
         reason = await self.config.guild(guild).ca_reason()
