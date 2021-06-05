@@ -129,8 +129,11 @@ class Events(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
             if rank_ca and rank >= rank_ca:
                 try:
                     await self.comment_analysis(message)
+                except discord.Forbidden as e:
+                    self.send_to_monitor(guild, "[CommentAnalysis] Failed to take action on "
+                                                f"user {author.id}. Please check my permissions.")
                 except Exception as e:
-                    log.error("Error during comment analysis", exc_info=e)
+                    log.error("Unexpected error in CommentAnalysis", exc_info=e)
 
     @commands.Cog.listener()
     async def on_message_edit(self, message_before: discord.Message, message: discord.Message):
@@ -199,8 +202,11 @@ class Events(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
             if rank_ca and rank >= rank_ca:
                 try:
                     await self.comment_analysis(message)
+                except discord.Forbidden as e:
+                    self.send_to_monitor(guild, "[CommentAnalysis] Failed to take action on "
+                                                f"user {author.id}. Please check my permissions.")
                 except Exception as e:
-                    log.error("Error during comment analysis", exc_info=e)
+                    log.error("Unexpected error in CommentAnalysis", exc_info=e)
 
 
     @commands.Cog.listener()

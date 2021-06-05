@@ -312,7 +312,8 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
         action = await self.config.guild(guild).ca_action()
 
         sanitized_content = message.content.replace("`", "'")
-        exp_text = "I have expelled the user for this message.\n" if Action(action) != Action.NoAction else ""
+        action_text = "punished" if Action(action) == Action.Punish else "expelled"
+        exp_text = f"I have {action_text} the user for this message.\n" if Action(action) != Action.NoAction else ""
         text = (f"Possible rule breaking message posted by {inline(author.name)} ({inline(str(author.id))})\n"
                 f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category.\n'
                 f"{exp_text}"
@@ -344,6 +345,23 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
             await guild.unban(author)
             self.dispatch_event("member_remove", author, Action.Softban.value, reason)
             await self.send_notification(guild, "", embed=em)
+        elif Action(action) == Action.Punish:
+            punish_role = guild.get_role(await self.config.guild(guild).punish_role())
+            punish_message = await self.config.guild(guild).punish_message()
+            if punish_role and not self.is_role_privileged(punish_role):
+                await author.add_roles(punish_role, reason="Defender: punish role assignation")
+                if punish_message:
+                    await message.channel.send(f"{author.mention} {punish_message}")
+                await self.send_notification(guild, "", embed=em)
+            else:
+                self.send_to_monitor(guild, "[CommentAnalysis] Failed to punish user. Is the punish role "
+                                            "still present and with *no* privileges?")
+                return
+
+        try:
+            await message.delete()
+        except:
+            pass
 
         await modlog.create_case(
             self.bot,

@@ -248,6 +248,8 @@ async def make_status(ctx, cog):
     msg += "This module is currently "
     msg += "**enabled**.\n\n" if enabled else "**disabled**.\n\n"
 
+    msg += ("**Comment analysis**\nTo be completed.\n\n") # TODO
+
     em = discord.Embed(color=discord.Colour.red(), description=msg)
     em.set_footer(text=f"`{p}dset warden` `{p}defender warden` to configure.")
     em.set_author(name="Auto modules (2/2)")
