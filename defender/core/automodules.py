@@ -18,7 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # Most automodules are too small to have their own files
 
 from ..abc import MixinMeta, CompositeMetaClass
-from redbot.core.utils.chat_formatting import box, humanize_timedelta
+from redbot.core.utils.chat_formatting import box, humanize_timedelta, inline
 from redbot.core.utils.common_filters import INVITE_URL_RE
 from ..abc import CompositeMetaClass
 from ..enums import Action
@@ -287,6 +287,10 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
     async def comment_analysis(self, message):
         guild = message.guild
         author = message.author
+        EMBED_TITLE = "💬 • Comment analysis"
+        EMBED_FIELDS = [{"name": "Username", "value": f"`{author}`"},
+                        {"name": "ID", "value": f"`{author.id}`"},
+                        {"name": "Channel", "value": message.channel.mention}]
 
         body = {
             "comment": {
@@ -324,54 +328,47 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
         else:
             return
 
-        action = await self.config.guild(guild).ca_action()
+        action = Action(await self.config.guild(guild).ca_action())
 
         sanitized_content = message.content.replace("`", "'")
-        action_text = "punished" if Action(action) == Action.Punish else "expelled"
-        exp_text = f"I have {action_text} the user for this message.\n" if Action(action) != Action.NoAction else ""
-        text = (f"Possible rule breaking message posted by {inline(author.name)} ({inline(str(author.id))})\n"
-                f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category.\n'
-                f"{exp_text}"
-                f"[Jump to message]({message.jump_url})\n"
-                f"\nMessage:\n{box(sanitized_content)}")
-        em = discord.Embed(color=discord.Colour.red(), description=text)
-        em.set_author(name="Comment Analysis")
+        exp_text = f"I have {ACTIONS_VERBS[action]} the user for this message.\n" if action != Action.NoAction else ""
+        text = (f"Possible rule breaking message detected. {exp_text}"
+                f'The following message scored {round(attribute_score, 2)}% in the **{triggered_attribute}** category:\n'
+                f"{box(sanitized_content)}")
 
-        if Action(action) == Action.NoAction:
+        if action == Action.NoAction:
             heat_key = f"core-ca-{message.channel.id}-{author.id}"
             if heat.get_custom_heat(guild, heat_key) == 0:
-                await self.send_notification(guild, "", embed=em)
+                await self.send_notification(guild, text, title=EMBED_TITLE, fields=EMBED_FIELDS, jump_to=message)
                 heat.increase_custom_heat(guild, heat_key, datetime.timedelta(minutes=15))
             return
 
         reason = await self.config.guild(guild).ca_reason()
 
-        if Action(action) == Action.Ban:
+        if action == Action.Ban:
             delete_days = await self.config.guild(guild).ca_wipe()
             await guild.ban(author, reason=reason, delete_message_days=delete_days)
             self.dispatch_event("member_remove", author, Action.Ban.value, reason)
-            await self.send_notification(guild, "", embed=em)
-        elif Action(action) == Action.Kick:
+        elif action == Action.Kick:
             await guild.kick(author, reason=reason)
             self.dispatch_event("member_remove", author, Action.Kick.value, reason)
-            await self.send_notification(guild, "", embed=em)
-        elif Action(action) == Action.Softban:
+        elif action == Action.Softban:
             await guild.ban(author, reason=reason, delete_message_days=1)
             await guild.unban(author)
             self.dispatch_event("member_remove", author, Action.Softban.value, reason)
-            await self.send_notification(guild, "", embed=em)
-        elif Action(action) == Action.Punish:
+        elif action == Action.Punish:
             punish_role = guild.get_role(await self.config.guild(guild).punish_role())
             punish_message = await self.config.guild(guild).punish_message()
             if punish_role and not self.is_role_privileged(punish_role):
                 await author.add_roles(punish_role, reason="Defender: punish role assignation")
                 if punish_message:
                     await message.channel.send(f"{author.mention} {punish_message}")
-                await self.send_notification(guild, "", embed=em)
             else:
                 self.send_to_monitor(guild, "[CommentAnalysis] Failed to punish user. Is the punish role "
                                             "still present and with *no* privileges?")
                 return
+
+        await self.send_notification(guild, text, title=EMBED_TITLE, fields=EMBED_FIELDS, jump_to=message)
 
         try:
             await message.delete()
@@ -382,7 +379,7 @@ class AutoModules(MixinMeta, metaclass=CompositeMetaClass): # type: ignore
             self.bot,
             guild,
             message.created_at,
-            action,
+            action.value,
             author,
             guild.me,
             reason,
